@@ -13,13 +13,13 @@ var client = new TelegramBotClient(settings.BotToken);
 var cts = new CancellationTokenSource();
 var receiverOptions = new Telegram.Bot.Polling.ReceiverOptions() { AllowedUpdates = Array.Empty<UpdateType>() };
 
-static Task OnErrors(ITelegramBotClient bot, Exception ex, CancellationToken cancellationToken)
+Task OnErrors(ITelegramBotClient bot, Exception ex, CancellationToken cancellationToken)
 {
     Console.WriteLine(ex.Message);
     return Task.CompletedTask;
 }
 
-static async Task OnUpdates(ITelegramBotClient bot, Update update, CancellationToken cancellationToken)
+async Task OnUpdates(ITelegramBotClient bot, Update update, CancellationToken cancellationToken)
 {
     try
     {
