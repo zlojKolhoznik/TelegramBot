@@ -13,72 +13,28 @@ var client = new TelegramBotClient(settings.BotToken);
 var cts = new CancellationTokenSource();
 var receiverOptions = new Telegram.Bot.Polling.ReceiverOptions() { AllowedUpdates = Array.Empty<UpdateType>() };
 
-client.StartReceiving(
-    updateHandler: OnUpdates,
-    pollingErrorHandler: OnErrors,
-    receiverOptions: receiverOptions,
-    cancellationToken: cts.Token);
-
-Task OnErrors(ITelegramBotClient bot, Exception ex, CancellationToken cancellationToken)
+static Task OnErrors(ITelegramBotClient bot, Exception ex, CancellationToken cancellationToken)
 {
     Console.WriteLine(ex.Message);
     return Task.CompletedTask;
 }
 
-async Task OnUpdates(ITelegramBotClient bot, Update update, CancellationToken cancellationToken)
+static async Task OnUpdates(ITelegramBotClient bot, Update update, CancellationToken cancellationToken)
 {
-    if (update.Type != UpdateType.Message)
+    try
     {
-        await bot.SendTextMessageAsync(
-            chatId: update.Message.Chat.Id,
-            text: "Oops... I don't know such commands");
+        await CheckUpdate(bot, update);
     }
-    switch (update.Message!.Text)
-    {
-        case "/start":
-            await bot.SendTextMessageAsync(
-            chatId: update.Message.Chat.Id,
-            text: "Hello\\! I am *GeoWeatherBot*\\. I will send you the current weather at the point you send to me",
-            parseMode: ParseMode.MarkdownV2);
-            return;
-        case "/help":
-            for (int i = 1; i <= 3; i++)
-            {
-                InputOnlineFile input;
-                using (FileStream fs = new FileStream($"{i}.jpg", FileMode.Open, FileAccess.Read, FileShare.Read))
-                {
-                    input = new InputOnlineFile(fs);
-
-                    await bot.SendPhotoAsync(
-                        chatId: update.Message!.Chat.Id,
-                        photo: input);
-                }
-            }
-            await bot.SendTextMessageAsync(
-                chatId: update.Message.Chat.Id,
-                text: "To send me the geolocation, you should:\n1\\. Click `Attachment` button near the message input\n2\\. Choose `geolocation` option\n3\\. Select desired location and click `send` button",
-                parseMode: ParseMode.MarkdownV2);
-            return;
-        default:
-            break;
+    catch 
+    { 
+        return; 
     }
-    if (update.Message!.Location == null)
-    {
-        await bot.SendTextMessageAsync(
-            chatId: update.Message.Chat.Id,
-            text: "I understand only messages with a location, commands `/start` and `/help`\\!",
-            parseMode: ParseMode.MarkdownV2);
-    }
-
-    string uri = $"https://api.openweathermap.org/data/3.0/onecall?lat={update.Message.Location!.Latitude}&lon={update.Message.Location.Longitude}&exclude=daily,minutely,hourly,alerts&appid={settings.WeatherApiKey}&units=metric&lang=en";
+    string uri = $"https://api.openweathermap.org/data/3.0/onecall?lat={update.Message!.Location!.Latitude}&lon={update.Message.Location.Longitude}&exclude=daily,minutely,hourly,alerts&appid={settings.WeatherApiKey}&units=metric&lang=en";
     string json = await WebUtils.GetTextResponseAsync(uri);
     WeatherInfo weatherInfo = JsonConvert.DeserializeObject<WeatherInfo>(json);
     if (weatherInfo == null)
     {
-        await bot.SendTextMessageAsync(
-            chatId: update.Message.Chat.Id,
-            text: "Oops... Something went wrong while getting weather. Try again later!");
-        System.IO.File.WriteAllText($"{DateTime.Now.ToString("ddMMyyyyhhmmss")}-log.log", $"{uri}\n\n\n\n{json}");
+        await WeatherNotReceivedHandler(bot, update, uri, json);
     }
     Current current = weatherInfo!.Current;
     string iconCode = current.Weather.First().Icon;
@@ -95,5 +51,86 @@ async Task OnUpdates(ITelegramBotClient bot, Update update, CancellationToken ca
             caption: caption);
     }
 }
+
+static async Task CheckUpdate(ITelegramBotClient bot, Update update)
+{
+    if (update.Type != UpdateType.Message)
+    {
+        throw new Exception();
+    }
+    switch (update.Message!.Text)
+    {
+        case "/start":
+            await StartHandler(bot, update);
+            throw new Exception();
+        case "/help":
+            await HelpHandler(bot, update);
+            throw new Exception();
+        default:
+            break;
+    }
+    if (update.Message!.Location == null)
+    {
+        await UnknownCommandHandler(bot, update);
+        throw new Exception();
+    }
+}
+
+static async Task StartHandler(ITelegramBotClient bot, Update update)
+{
+    await bot.SendTextMessageAsync(
+                chatId: update.Message!.Chat.Id,
+                text: "Hello\\! I am *GeoWeatherBot*\\. I will send you the current weather at the point you send to me",
+                parseMode: ParseMode.MarkdownV2);
+    return;
+}
+
+static async Task HelpHandler(ITelegramBotClient bot, Update update)
+{
+    for (int i = 1; i <= 3; i++)
+    {
+        string path = $"{i}.jpg";
+        await SendPhoto(bot, update, path);
+    }
+    await bot.SendTextMessageAsync(
+        chatId: update.Message!.Chat.Id,
+        text: "To send me the geolocation, you should:\n1\\. Click `Attachment` button near the message input\n2\\. Choose `geolocation` option\n3\\. Select desired location and click `send` button",
+        parseMode: ParseMode.MarkdownV2);
+    return;
+}
+
+static async Task SendPhoto(ITelegramBotClient bot, Update update, string path)
+{
+    InputOnlineFile input;
+    using (FileStream fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+    {
+        input = new InputOnlineFile(fs);
+        await bot.SendPhotoAsync(
+            chatId: update.Message!.Chat.Id,
+            photo: input);
+    }
+}
+
+static async Task UnknownCommandHandler(ITelegramBotClient bot, Update update)
+{
+    await bot.SendTextMessageAsync(
+                chatId: update.Message!.Chat.Id,
+                text: "I understand only messages with a location, commands `/start` and `/help`\\!",
+                parseMode: ParseMode.MarkdownV2);
+}
+
+static async Task WeatherNotReceivedHandler(ITelegramBotClient bot, Update update, string uri, string json)
+{
+    await bot.SendTextMessageAsync(
+                chatId: update.Message!.Chat.Id,
+                text: "Oops... Something went wrong while getting weather. Try again later!");
+    System.IO.File.WriteAllText($"{DateTime.Now.ToString("ddMMyyyyhhmmss")}-log.log", $"{uri}\n\n\n\n{json}");
+}
+
+client.StartReceiving(
+    updateHandler: OnUpdates,
+    pollingErrorHandler: OnErrors,
+    receiverOptions: receiverOptions,
+    cancellationToken: cts.Token);
 
 Console.ReadLine();
