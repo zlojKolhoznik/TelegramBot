@@ -62,11 +62,14 @@ static async Task CheckUpdate(ITelegramBotClient bot, Update update)
     {
         case "/start":
             await StartHandler(bot, update);
+            Console.WriteLine(update.Message!.From!.Username + " - " + update.Message.Text);
             throw new Exception();
         case "/help":
             await HelpHandler(bot, update);
+            Console.WriteLine(update.Message!.From!.Username + " - " + update.Message.Text);
             throw new Exception();
         default:
+            Console.WriteLine(update.Message!.From!.Username + " - " + update.Message.Text);
             break;
     }
     if (update.Message!.Location == null)

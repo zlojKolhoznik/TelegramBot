@@ -60,7 +60,7 @@ namespace TelegramBot.Models
         public double Uvi { get; set; }
 
         [JsonProperty("rain")]
-        public double? Rain { get; set; }
+        public Rain? Rain { get; set; }
     }
 
 }
